@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from secrets import token_bytes
 
 # Examples
-repo_sqlite = muteacle.SQLiteRepository(db_keep_open=True)
+repo_sqlite = muteacle.SQLiteRepository()
 salt_length = 32
 items_a = (b'A1', b'A2', b'A3')
 items_b = (b'B1', b'B2', b'B3')

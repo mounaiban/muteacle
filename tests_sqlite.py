@@ -33,7 +33,7 @@ from datetime import datetime, date
 from secrets import token_bytes
 
 # Filename and test repository settings
-repo_test_config_kwargs = {'db_keep_open': True, 'time_res_s': 1}
+repo_test_config_kwargs = {'time_res_s': 1}
 json_encoder = json.JSONEncoder()
 
 # PROTIP: Keep time_res_s to a very short period during tests to allow

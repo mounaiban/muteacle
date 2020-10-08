@@ -122,19 +122,14 @@ including 86400 (well, because ``86400/1 == 86400`` 🤓).
 PROTIP: The list comprehension ``[x for x in range(1, 86401) if 86400%x==0]``
 contains all acceptable values for ``time_res_s``.
 
-Running in Volatile Memory
-**************************
-To avoid creating a database file in storage, prepare the Repository as
-follows:
+In-Memory Mode
+**************
+To avoid creating a database file in storage, simply leave out the
+``db_path`` option:
 
  ::
 
-   >>> repo_test = SQLiteRepository(db_keep_open=True)
-
-If a ``db_path`` is not specified, a (temporary) database in volatile
-memory will be used instead. At time of writing, the ``db_keep_open``
-argument must be set to ``True`` when using such Repositories due to a
-bug which would be hopefully resolved soon.
+   >>> repo_test = SQLiteRepository()
 
 Hasher Tunables for Speed or for Confidentiality
 ************************************************

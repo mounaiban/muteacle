@@ -808,7 +808,7 @@ class SQLiteRepository(Repository):
     default_filename = 'muteacle-test.sqlite3'
     defaults = {
         'db_keep_open' : False,
-        'db_path' : None,
+        'db_path' : ':memory:',
     }
     table_spec = {
         'MuteacleHasherTypes' : (
@@ -836,20 +836,26 @@ class SQLiteRepository(Repository):
         The following arguments are supported:
 
         * ``db_path`` - ``path``-like object specifying filesystem
-          path to the SQLite database file,
+          path to the SQLite database file. The default path is
+          ``:memory:``, which creates an in-memory database.
 
         * ``db_keep_open`` - Set to ``True`` in order to keep the
           connection to the database file open, particularly when
-          testing or when using certain database server setups
+          testing or when using certain database server setups.
+          If ``db_path`` is set to ``:memory:``, this argument will 
+          be set to ``True``.
 
         """
         # TODO: Prevent database writes if more than one future config
         # detected.
         self._db_conn = None
         self._db_path = kwargs.get('db_path', self.defaults['db_path'])
-        self._db_keep_open = kwargs.get(
-            'db_keep_open', self.defaults['db_keep_open']
-        )
+        if self._db_path == self.defaults['db_path']:
+                self._db_keep_open = True
+        else:
+            self._db_keep_open = kwargs.get(
+                'db_keep_open', self.defaults['db_keep_open']
+            )
         self._table_check_passed = False
 
         self.defaults = join_dict(self.defaults, super().defaults)
