@@ -102,7 +102,7 @@ The required time accuracy for verifying witnessings, or the
 *Time Resolution* can be adjusted as follows, given that ``repo_test``
 from the guide above has been prepared:
 
- ::
+::
 
   >>> repo_test.set_config({'time_res_s': 30})
   datetime.datetime(2101, 10, 5, 2, 51, 30)
@@ -119,17 +119,17 @@ configuration applies.
 Acceptable ``time_res_s`` values are whole-number dividends of 86400,
 including 86400 (well, because ``86400/1 == 86400`` 🤓).
 
-PROTIP: The list comprehension ``[x for x in range(1, 86401) if 86400%x==0]``
-contains all acceptable values for ``time_res_s``.
+  *PROTIP*: The list comprehension ``[x for x in range(1, 86401) if 86400%x==0]``
+  contains all acceptable values for ``time_res_s``.
 
 In-Memory Mode
 **************
 To avoid creating a database file in storage, simply leave out the
 ``db_path`` option:
 
- ::
+::
 
-   >>> repo_test = SQLiteRepository()
+  >>> repo_test = SQLiteRepository()
 
 Hasher Tunables for Speed or for Confidentiality
 ************************************************
@@ -139,14 +139,13 @@ or for confidentiality. Document how to do this.
 Weakness in Handling Unicode-Obfuscated Text
 ********************************************
 If the text was obfuscated using alternate glyphs, decorations such as
-overlapping marks or other Unicode formatting features (see *Lunicode*
-for an example), the exact form has to be used for the verification to
-succeed.
+overlapping marks or other Unicode formatting features (see `Lunicode.js  
+<https://github.com/combatwombat/Lunicode.js>`_ for examples), the exact form
+has to be used for the verification to succeed.
 
-Unicode obfuscation may be used by adversaries as an effective
-circumvention technique to frustrate verification. A proposed mitigation
-would involve preprocessing the text to normalise its representation to
-de-obfuscate it before its witnessing.
+Unicode obfuscation may be used by adversaries to frustrate verification.
+A proposed mitigation would involve preprocessing the text to de-obfuscate
+it by cleaning it up before its witnessing.
 
 Can I Run The Unit Tests?
 =========================
