@@ -596,7 +596,7 @@ class Repository(MuteacleConfigurable):
 
         super().__init__(**kwargs)
 
-    def append_log(self, items, hasher=None, **kwargs):
+    def append_log(self, items, **kwargs):
         """
         Add all items in ``items`` to the Hash Log.
 
@@ -658,13 +658,24 @@ class Repository(MuteacleConfigurable):
 
     def check_log(self, dt, item):
         """
-        Find out if the Hash Log has been exposed to a particular
-        ``bytes``-like data item ``item`` during the day interval
-        of Python ``datetime`` ``dt``.
+        Find out if the Hash Log has been witnessed a particular data
+        item at a sufficiently approximate date and time.
 
         Returns ``True`` if ``data`` is recognised, ``False`` otherwise.
 
+        Arguments:
+
+        * ``item``: ``bytes``-like object representing the data item to
+          be checked,
+
+        * ``dt``: ``datetime`` object referring to the approximate time
+          when ``item`` was supposed to have been witnessed. The accuracy
+          required is determined by ``time_res_s`` at witnessing time.
+
         """
+        # TODO: Explain the interval system, and how time accuracy works
+        # in Muteacle
+
         # Please override me
         raise NotImplementedError
 
@@ -673,6 +684,17 @@ class Repository(MuteacleConfigurable):
         # NOTE: Some db systems may not require or actually use an
         # explicit closing function call. If using such a system,
         # simply override with a dummy method.
+        raise NotImplementedError
+
+    def get_config(self):
+        """
+        Returns the active configuration for the Repository.
+
+        This method is overriden from MuteacleConfigurable to ensure
+        that the Repository configuration is consistent with the
+        knowledge of the underlying database.
+
+        """
         raise NotImplementedError
 
     def get_hashers(self, dt):
@@ -702,31 +724,23 @@ class Repository(MuteacleConfigurable):
         # Returns a dict with values: hasher, datetime
         raise NotImplementedError
 
-    def save_hasher_config(self, hasher, dt=datetime.utcnow()):
+    def pending_repo_config(self):
+        raise NotImplementedError
+
+    def pending_repo_config_datetime(self):
+        raise NotImplementedError
+
+    def save_hasher_config(self, hasher):
         """
         Save information required to rebuild the Hasher ``hasher``
         into the database.
 
-        If the optional ``datetime``-like object ``dt`` is specified,
-        the Hasher will be linked with the day interval of this
-        datetime. Thus, ``dt`` can be used for backdating or postdating
-        Hashers.  To ensure recoverability of hashes, please
-        exercise caution when overriding ``dt``.
+        Returns the earliest datetime by which a hasher may be recalled.
 
         Hashers are recalled using ``get_hashers()``.
 
         Raises ``TypeErrors`` if an attempt is made to save a Hasher
         that is unsupported by the Repository.
-
-        """
-        # Returns a datetime with which the Hasher can be accessed
-        raise NotImplementedError
-
-    def load_latest_repo_config(self):
-        """
-        Loads the last saved Repository configuration.
-
-        Returns a ``dict`` containing the loaded configuration.
 
         """
         raise NotImplementedError
@@ -1068,8 +1082,6 @@ class SQLiteRepository(Repository):
         return {'hasher':hasher_new, 'datetime':dt_n}
 
     def save_hasher_config(self, hasher):
-        # Writes hasher to the databse. Returns hasher datetime
-        # which can be used to recall hasher.
         dt = datetime.utcnow()
 
         if isinstance(hasher, Hasher):
@@ -1102,13 +1114,10 @@ class SQLiteRepository(Repository):
         return req['datetime']
 
     def get_config(self):
-        """
-        Gets the active configuration from the db
-        Uses _slr_get_active_repo_config()
-        """
+        # Uses _slr_get_active_repo_config()
         req = self._slr_get_active_repo_config()
         self._config = req['config']
-        # TODO: self._config is now a mini-cache
+        # in a Repository, self._config is a mini-cache
         return self._config
 
     def load_latest_repo_config(self):
@@ -1160,7 +1169,7 @@ class SQLiteRepository(Repository):
             req_sched = self._slr_get_pending_repo_config()
             config_sched = req_sched['config']
             if config_pend == config_sched:
-                # requested config identical to pendign config, do nothing
+                # requested config identical to pending config, do nothing
                 return req_sched['datetime']
             elif config_pend == config_active:
                 # requested config has no effective change
