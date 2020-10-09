@@ -1288,16 +1288,28 @@ class SQLiteRepository(Repository):
         * tables_verified - Number of tables with names and columns
           matching specification
 
+        NOTE: The check is skipped if the database path ``_db_path`` has
+        been set to ``:memory:``. This happens when the Repository is run
+        in volatile memory.
+
         May throw sqlite3.DatabaseError in the event of technical
         difficulties accessing the database file.
 
         """
-        # TODO: Skip test entirely if a new Repository is created
-        # in volatile memory
         table_names = tuple(self.table_spec.keys())
         tables_expected = len(table_names)
         tables_found = 0
         tables_verified = 0
+        results = {
+            'tables_expected' : tables_expected,
+            'tables_found' : tables_found,
+            'tables_verified' : tables_verified,
+        }
+
+        if self._db_path == ':memory:':
+            self._table_check_passed = False
+            return results
+
         try:
             conn = self.get_db_conn(mode='ro')
             for tname in self.table_spec.keys():
@@ -1321,15 +1333,6 @@ class SQLiteRepository(Repository):
         except sqlite3.OperationalError:
             pass
         finally:
-            results = {
-                'tables_expected' : tables_expected,
-                'tables_found' : tables_found,
-                'tables_verified' : tables_verified,
-            }
-
-            # NOTE: There is no check for the db_keep_open flag, as
-            # this check is only relevant for Repositories in
-            # storage/non-volatile memory
             self.close_db()
 
             if tables_expected == tables_verified:
