@@ -572,13 +572,13 @@ class Repository(MuteacleConfigurable):
     # database. Subsequent accesses will apply the last saved
     # configuration, ignoring these kwargs.
 
-    supported_hashers = {} # See __init__() for actual list
     defaults = {
         'time_res_s' : 5,
         'salt_length' : 32,
         'hasher_class_name' : 'ScryptHasher',
     }
     set_config_keys = ('time_res_s', 'salt_length')
+    supported_hashers = {} # See __init__() for actual list
 
     def __init__(self, **kwargs):
         """
@@ -591,8 +591,9 @@ class Repository(MuteacleConfigurable):
             'PBKDF2Hasher' : PBKDF2Hasher,
             'ScryptHasher' : ScryptHasher,
         }
-        self.set_config_keys += super().set_config_keys
         self.defaults = join_dict(self.defaults, super().defaults)
+        self.set_config_keys += super().set_config_keys
+        self._read_only = False
 
         super().__init__(**kwargs)
 
@@ -862,17 +863,19 @@ class SQLiteRepository(Repository):
         """
         # TODO: Prevent database writes if more than one future config
         # detected.
+        self.defaults = join_dict(self.defaults, super().defaults)
         self._db_conn = None
         self._db_path = kwargs.get('db_path', self.defaults['db_path'])
+        chtab = self._slr_check_db_tables()
+        self._table_check_passed = (
+            chtab['tables_expected'] == chtab['tables_verified']
+        )
         if self._db_path == self.defaults['db_path']:
                 self._db_keep_open = True
         else:
             self._db_keep_open = kwargs.get(
                 'db_keep_open', self.defaults['db_keep_open']
             )
-        self._table_check_passed = False
-
-        self.defaults = join_dict(self.defaults, super().defaults)
 
         self._slr_create_tables()
         super().__init__(**kwargs)
@@ -1217,31 +1220,28 @@ class SQLiteRepository(Repository):
               Type Hints are explained in the SQLite Documentation.
 
         """
-        results = self._slr_check_db_tables()
         if self._table_check_passed:
             return True
 
-        if results['tables_found'] == 0:
-            # create tables
-            conn = self.get_db_conn()
-            conn.execute('BEGIN')
-            for tname in self.table_spec:
-                csp_all = ""
-                for colspec in self.table_spec[tname]:
-                    csp = "{} {}, ".format(colspec[0], colspec[1])
-                    csp_all = "".join((csp_all, csp))
-                sc = 'CREATE TABLE {}({})'.format(tname, csp_all[:-2])
-                conn.execute(sc)
-
-            conn.commit()
-            if self._db_keep_open is not True:
-                self.close_db()
-            return True
-
         else:
-            # TODO: Detailed error reports for databases with present
-            # but incomplete or incorrect tables would be nice.
-            return False
+            try:
+                # create tables
+                conn = self.get_db_conn()
+                conn.execute('BEGIN')
+                for tname in self.table_spec:
+                    csp_all = ""
+                    for colspec in self.table_spec[tname]:
+                        csp = "{} {}, ".format(colspec[0], colspec[1])
+                        csp_all = "".join((csp_all, csp))
+                    sc = 'CREATE TABLE {}({})'.format(tname, csp_all[:-2])
+                    conn.execute(sc)
+                conn.commit()
+            except sqlite3.DatabaseError:
+                return False
+            finally:
+                if self._db_keep_open is not True:
+                    self.close_db()
+            return True
 
     def _slr_populate_supported_hashers_table(self):
         """
@@ -1326,9 +1326,6 @@ class SQLiteRepository(Repository):
             pass
         finally:
             self.close_db()
-
-            if tables_expected == tables_verified:
-                self._table_check_passed = True
             return results
 
     def _slr_get_db_uri(self, path, **kwargs):
