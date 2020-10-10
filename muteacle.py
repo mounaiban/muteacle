@@ -889,9 +889,6 @@ class SQLiteRepository(Repository):
 
         self._config = self.load_latest_repo_config()
         time_res_s = self._config['time_res_s']
-
-        dt_hasher = None
-
         class_name = self.defaults['hasher_class_name']
         default_hasher_class = self.supported_hashers[class_name]
         hcls = kwargs.get('hasher_class', default_hasher_class)
@@ -901,27 +898,13 @@ class SQLiteRepository(Repository):
         req_hasher = self.new_hasher(hasher_class=hcls, config=hcfg)
         hasher = req_hasher['hasher']
 
-        conn = self.get_db_conn()
-        conn.execute('BEGIN')
-
-        count = 0
-        for i in items:
-            # save the hashes to database
-            if isinstance(i, bytes) is not True:
-                continue
-            mhsh = hasher.get_hash(i)
-            mhsh_b64 = b64encode(mhsh)
-            mhsh_str = str(mhsh_b64)[2:-1] # Trim off Python-specific stuff
-            sc_append = "INSERT INTO MuteacleLog(hash) VALUES (?)"
-            conn.execute(sc_append, (mhsh_str,))
-            count += 1
-        conn.commit()
-
-        if self._db_keep_open is not True:
-            self.close_db()
-
+        report = self._slr_write_hashes(items, hasher)
         dt_hasher = req_hasher['datetime']
-        return {'datetime':dt_hasher, 'items_logged':count, 'items':len(items)}
+        return {
+            'datetime': dt_hasher,
+            'items_logged': report[0],
+            'items': report[1],
+        }
 
     def check_log(self, dt, item):
         out = False
@@ -1395,6 +1378,27 @@ class SQLiteRepository(Repository):
         if self._db_keep_open is not True:
             self.close_db()
         return dt_n
+
+    def _slr_write_hashes(self, items, hasher):
+        # Generates hashes of data items in ``items`` and saves them to
+        # the database (witnessing). Returns a tuple as follows:
+        # (items_logged, items_total)
+        conn = self.get_db_conn()
+        conn.execute('BEGIN')
+        count = 0
+        for i in items:
+            if isinstance(i, bytes) is not True:
+                continue
+            mhsh = hasher.get_hash(i)
+            mhsh_b64 = b64encode(mhsh)
+            mhsh_str = str(mhsh_b64)[2:-1] # Trim off Python-specific stuff
+            sc_append = "INSERT INTO MuteacleLog(hash) VALUES (?)"
+            conn.execute(sc_append, (mhsh_str,))
+            count += 1
+        conn.commit()
+        if self._db_keep_open is not True:
+            self.close_db()
+        return(count, len(items))
 
     def _slr_delete_pending_repo_configs(self):
         conn = self.get_db_conn()
