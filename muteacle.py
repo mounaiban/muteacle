@@ -293,8 +293,8 @@ class MuteacleConfigurable:
 
         """
         self._config = {}
-
-        self.set_config(kwargs)
+        if kwargs.get('set_config', True) is not False:
+            self.set_config(kwargs)
 
     @classmethod
     def fromJSON(self, json_str, decoder=json.JSONDecoder()):
