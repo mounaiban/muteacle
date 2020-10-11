@@ -4,13 +4,11 @@ Wishlist
 0.1.2
 =====
 
-Features
-********
-* **Invalid System Clock Handling**: Deal with cases where there are
-  multiple pending configurations.
-
 Tests
 *****
+* **Invalid System Clock Handling**: test cases for SQLiteRepository
+  when multiple pending repository configurations are detected.
+
 * **SQLite Repository DB Operations**: Private methods that handle
   database operations. These methods have names beginning with
   ``_slr``.

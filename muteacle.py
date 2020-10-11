@@ -861,29 +861,30 @@ class SQLiteRepository(Repository):
           be set to ``True``.
 
         """
-        # TODO: Prevent database writes if more than one future config
-        # detected.
         self.defaults = join_dict(self.defaults, super().defaults)
+        super().__init__(set_config=False, **kwargs)
         self._db_conn = None
         self._db_path = kwargs.get('db_path', self.defaults['db_path'])
         chtab = self._slr_check_db_tables()
         self._table_check_passed = (
             chtab['tables_expected'] == chtab['tables_verified']
         )
+
         if self._db_path == self.defaults['db_path']:
-                self._db_keep_open = True
+            self._db_keep_open = True
         else:
             self._db_keep_open = kwargs.get(
                 'db_keep_open', self.defaults['db_keep_open']
             )
 
-        self._slr_create_tables()
-        super().__init__(**kwargs)
-        self._slr_populate_supported_hashers_table()
-
-        config_init = self.load_latest_repo_config()
-        if config_init == {}:
+        if self._table_check_passed is True:
+            # fall into read-only mode in case of excess pending configs
+            self._read_only = self._slr_count_pending_repo_configs() > 1
+        else:
+            self._slr_create_tables()
+            self._slr_populate_supported_hashers_table()
             self.set_config(kwargs) # also saves the first config
+        self.load_latest_repo_config() # cache latest config in self._config
 
     def append_log(self, items, **kwargs):
         # Submits an iter of data items for witnessing by the log
@@ -1176,10 +1177,13 @@ class SQLiteRepository(Repository):
     def get_db_conn(self, **kwargs):
         path = self._db_path
         if self._db_conn is None:
+            if self._read_only is True:
+                kwargs['mode'] = 'ro'
             if path is None:
                 # NOTE: The :memory: database always opens in read-write.
                 # This is currently tolerated, as :memory: is only used
                 # for testing purposes.
+                kwargs.mode = 'rw'
                 self._db_conn = sqlite3.connect(':memory:')
             else:
                 uri = self._slr_get_db_uri(path, **kwargs)
@@ -1220,28 +1224,24 @@ class SQLiteRepository(Repository):
               Type Hints are explained in the SQLite Documentation.
 
         """
-        if self._table_check_passed:
-            return True
-
-        else:
-            try:
-                # create tables
-                conn = self.get_db_conn()
-                conn.execute('BEGIN')
-                for tname in self.table_spec:
-                    csp_all = ""
-                    for colspec in self.table_spec[tname]:
-                        csp = "{} {}, ".format(colspec[0], colspec[1])
-                        csp_all = "".join((csp_all, csp))
-                    sc = 'CREATE TABLE {}({})'.format(tname, csp_all[:-2])
-                    conn.execute(sc)
-                conn.commit()
-            except sqlite3.DatabaseError:
-                return False
-            finally:
-                if self._db_keep_open is not True:
-                    self.close_db()
-            return True
+        try:
+            # create tables
+            conn = self.get_db_conn()
+            conn.execute('BEGIN')
+            for tname in self.table_spec:
+                csp_all = ""
+                for colspec in self.table_spec[tname]:
+                    csp = "{} {}, ".format(colspec[0], colspec[1])
+                    csp_all = "".join((csp_all, csp))
+                sc = 'CREATE TABLE {}({})'.format(tname, csp_all[:-2])
+                conn.execute(sc)
+            conn.commit()
+        except sqlite3.DatabaseError:
+            return False
+        finally:
+            if self._db_keep_open is not True:
+                self.close_db()
+        return True
 
     def _slr_populate_supported_hashers_table(self):
         """
@@ -1289,17 +1289,14 @@ class SQLiteRepository(Repository):
 
         """
         table_names = tuple(self.table_spec.keys())
-        tables_expected = len(table_names)
-        tables_found = 0
-        tables_verified = 0
         results = {
-            'tables_expected' : tables_expected,
-            'tables_found' : tables_found,
-            'tables_verified' : tables_verified,
+            'tables_expected' : len(table_names),
+            'tables_found' : 0,
+            'tables_verified' : 0,
         }
 
         if self._db_path == ':memory:':
-            self._table_check_passed = False
+            results['tables_verified'] = -1
             return results
 
         try:
@@ -1311,7 +1308,7 @@ class SQLiteRepository(Repository):
                 curs = conn.execute(sc)
                 # Get column names from table spec and check
                 cnames = [cs[0] for cs in self.table_spec[tname]]
-                tables_found += 1
+                results['tables_found'] += 1
                 i = 0
                 for d in curs.description:
                     if d[0] not in cnames:
@@ -1321,7 +1318,7 @@ class SQLiteRepository(Repository):
                 if i != len(cnames):
                     break
                 else:
-                    tables_verified += 1
+                    results['tables_verified'] += 1
         except sqlite3.OperationalError:
             pass
         finally:
@@ -1482,7 +1479,7 @@ class SQLiteRepository(Repository):
         else:
             return None
 
-    def _slr_get_pending_repo_configs_count(self, **kwargs):
+    def _slr_count_pending_repo_configs(self, **kwargs):
         # Counts number of Repository configurations with future
         # timestamps. To be used for checking for scheduled changes,
         # or if time has been tampered with or misconfigured.
@@ -1493,6 +1490,6 @@ class SQLiteRepository(Repository):
              """
         ts = datetime.utcnow().timestamp()
         cus = conn.execute(sc, (ts,))
-        count = cus.fetchall[0][0]
-        return min(count, 0)
+        count = cus.fetchall()[0][0]
+        return max(count, 0)
 
