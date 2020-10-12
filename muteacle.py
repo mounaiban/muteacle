@@ -1078,7 +1078,7 @@ class SQLiteRepository(Repository):
                 repo_config = self.get_config()
                 self.set_config()
             time_res_s = repo_config['time_res_s']
-            tid = self._slr_get_hasher_type_id(hasher)
+            tid = self._slr_read_hasher_type_id(hasher)
             if tid is not None:
                 config_json = hasher.json()
                 salt_b64 = b64encode(hasher.salt)
@@ -1093,16 +1093,16 @@ class SQLiteRepository(Repository):
             raise TypeError('unsupported or non-hasher')
 
     def pending_repo_config(self):
-        req = self._slr_get_pending_repo_config()
+        req = self._slr_read_pending_repo_config()
         return req['config']
 
     def pending_repo_config_datetime(self):
-        req = self._slr_get_pending_repo_config()
+        req = self._slr_read_pending_repo_config()
         return req['datetime']
 
     def get_config(self):
-        # Uses _slr_get_active_repo_config()
-        req = self._slr_get_active_repo_config()
+        # Uses _slr_read_active_repo_config()
+        req = self._slr_read_active_repo_config()
         self._config = req['config']
         # in a Repository, self._config is a mini-cache
         return self._config
@@ -1132,7 +1132,7 @@ class SQLiteRepository(Repository):
         if config is None:
             config = self.defaults
 
-        req_active = self._slr_get_active_repo_config()
+        req_active = self._slr_read_active_repo_config()
         config_active = req_active['config']
 
         if config_active == {}:
@@ -1153,7 +1153,7 @@ class SQLiteRepository(Repository):
         else:
             for k in self.set_config_keys:
                 config_pend[k] = config.get(k, config_active[k])
-            req_sched = self._slr_get_pending_repo_config()
+            req_sched = self._slr_read_pending_repo_config()
             config_sched = req_sched['config']
             if config_pend == config_sched:
                 # requested config identical to pending config, do nothing
@@ -1186,7 +1186,7 @@ class SQLiteRepository(Repository):
                 kwargs.mode = 'rw'
                 self._db_conn = sqlite3.connect(':memory:')
             else:
-                uri = self._slr_get_db_uri(path, **kwargs)
+                uri = self._slr_read_db_uri(path, **kwargs)
                 self._db_conn = sqlite3.connect(uri, uri=True)
             return self._db_conn
         else:
@@ -1325,7 +1325,7 @@ class SQLiteRepository(Repository):
             self.close_db()
             return results
 
-    def _slr_get_db_uri(self, path, **kwargs):
+    def _slr_read_db_uri(self, path, **kwargs):
         """
         Generates SQLite URIs for use with the sqlite3.connect()
         method.
@@ -1423,7 +1423,7 @@ class SQLiteRepository(Repository):
         if self._db_keep_open is not True:
             self.close_db()
 
-    def _slr_get_active_repo_config(self):
+    def _slr_read_active_repo_config(self):
         ts = datetime.utcnow().timestamp()
         conn = self.get_db_conn(mode='ro')
         sc = """
@@ -1444,7 +1444,7 @@ class SQLiteRepository(Repository):
             self.close_db()
         return {'config': config, 'datetime': dt}
 
-    def _slr_get_pending_repo_config(self):
+    def _slr_read_pending_repo_config(self):
         ts = datetime.utcnow().timestamp()
         conn = self.get_db_conn(mode='ro')
         sc = """
@@ -1465,7 +1465,7 @@ class SQLiteRepository(Repository):
             self.close_db()
         return {'config': config, 'datetime': dt}
 
-    def _slr_get_hasher_type_id(self, hasher):
+    def _slr_read_hasher_type_id(self, hasher):
         conn = self.get_db_conn(mode='ro')
         sc = "SELECT rowid from MuteacleHasherTypes WHERE name = ?"
         class_name = hasher.__class__.__name__
