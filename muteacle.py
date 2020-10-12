@@ -884,14 +884,14 @@ class SQLiteRepository(Repository):
             self._slr_create_tables()
             self._slr_populate_supported_hashers_table()
             self.set_config(kwargs) # also saves the first config
-        self.load_latest_repo_config() # cache latest config in self._config
+        self.get_config() # cache latest config in self._config
 
     def append_log(self, items, **kwargs):
         # Submits an iter of data items for witnessing by the log
         # kwargs supported: hasher_class, hasher_config
         # May raise TypeError
 
-        self._config = self.load_latest_repo_config()
+        self.get_config() # updates self._config
         time_res_s = self._config['time_res_s']
         class_name = self.defaults['hasher_class_name']
         default_hasher_class = self.supported_hashers[class_name]
@@ -1072,7 +1072,7 @@ class SQLiteRepository(Repository):
         dt = datetime.utcnow()
 
         if isinstance(hasher, Hasher):
-            repo_config = self.load_latest_repo_config()
+            repo_config = self.get_config()
             if repo_config == {}:
                 # no repo config saved yet
                 repo_config = self.get_config()
@@ -1101,21 +1101,12 @@ class SQLiteRepository(Repository):
         return req['datetime']
 
     def get_config(self):
+        # Gets the latest repository configuration from the database
         # Uses _slr_read_active_repo_config()
         req = self._slr_read_active_repo_config()
         self._config = req['config']
         # in a Repository, self._config is a mini-cache
         return self._config
-
-    def load_latest_repo_config(self):
-        # Alternate method to get_config()
-        # TODO: remove this method, and replace it with get_config()
-        configs = self.load_repo_configs()
-        if len(configs) > 0:
-            self._config = configs[0]
-            return configs[0]
-        else:
-            return {}
 
     def set_config(self, config=None):
         """
@@ -1186,7 +1177,7 @@ class SQLiteRepository(Repository):
                 kwargs.mode = 'rw'
                 self._db_conn = sqlite3.connect(':memory:')
             else:
-                uri = self._slr_read_db_uri(path, **kwargs)
+                uri = self._slr_db_uri(path, **kwargs)
                 self._db_conn = sqlite3.connect(uri, uri=True)
             return self._db_conn
         else:
@@ -1325,7 +1316,7 @@ class SQLiteRepository(Repository):
             self.close_db()
             return results
 
-    def _slr_read_db_uri(self, path, **kwargs):
+    def _slr_db_uri(self, path, **kwargs):
         """
         Generates SQLite URIs for use with the sqlite3.connect()
         method.
