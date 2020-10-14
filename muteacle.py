@@ -726,9 +726,28 @@ class Repository(MuteacleConfigurable):
         raise NotImplementedError
 
     def pending_repo_config(self):
+        """
+        Returns the next future Repository configuration, as a ``dict``.
+        If there are no pending configurations, the empty dict ``{}``
+        is returned.
+
+        Repositories can only have one pending configuration at any
+        given time.
+
+        See Also ``pending_repo_config_datetime()``
+
+        """
         raise NotImplementedError
 
     def pending_repo_config_datetime(self):
+        """
+        Returns a ``datetime`` when the future Repository configuration
+        will be applied. If there are no pending configurations, ``None``
+        is returned instead.
+
+        See Also ``pending_repo_config()``
+
+        """
         raise NotImplementedError
 
     def save_hasher_config(self, hasher):
