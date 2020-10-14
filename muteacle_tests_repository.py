@@ -266,6 +266,27 @@ class SetupTests(unittest.TestCase):
 
         self.assertEqual(configs, [])
 
+    def test_save_hasher_config(self):
+        """
+        Hasher: high-level hasher configuration write test
+        Repository must correctly write Hasher configuration to the
+        database when the save_hasher_config() method is used.
+
+        """
+        ts = datetime.utcnow().timestamp()
+        meta = {'test': 'save_hasher_config', 'ts': ts}
+        self.repo.set_config({'meta': meta})
+
+        class_name = self.repo.defaults['hasher_class_name']
+        hasher_class = self.repo.supported_hashers[class_name]
+        salt_len = self.repo._config['salt_length']
+        salt = token_bytes(salt_len)
+        hasher_new = hasher_class(salt, meta=meta)
+        dt = self.repo.save_hasher_config(hasher_new)
+
+        load = self.repo.get_hashers(dt)
+        self.assertIn(hasher_new, load)
+
     def test_get_hashers_interval_start(self):
         """
         Hasher: load hashers specifying datetime at start of interval

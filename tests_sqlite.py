@@ -47,37 +47,8 @@ class SetupTests(mtr.SetupTests):
     These tests are run in volatile memory.
 
     """
-    # TODO: Replace these unit tests with tests SQLite Repository db
-    # operation methods (_slr) in a future release. These tests can
-    # generalised and moved to ``muteacle_tests_repository``.
     repository_class = muteacle.SQLiteRepository
     repo_kwargs = repo_test_config_kwargs
-
-    def test_save_hasher_config(self):
-        """
-        Hasher: hasher configuration write test
-        Repository must correctly write Hasher configuration to the
-        database.
-
-        """
-        ts = datetime.utcnow().timestamp()
-        meta = {'test': 'save_hasher_config', 'ts': ts}
-        self.repo.set_config({'meta': meta})
-
-        # create a new hasher from scratch and save it
-        class_name = self.repo.defaults['hasher_class_name']
-        hasher_class = self.repo.supported_hashers[class_name]
-        salt = token_bytes(32)
-        hasher = hasher_class(salt, meta=meta)
-        self.repo.save_hasher_config(hasher)
-
-        conn = self.repo.get_db_conn()
-        config_json = hasher.json()
-        sc = "SELECT rowid from MuteacleHasherConfigs WHERE config=?"
-        cus = conn.execute(sc, (config_json,))
-        rows = cus.fetchall()
-
-        self.assertEqual(len(rows),1)
 
 # NOTE: Test hasher security has been downgraded to speed up testing
 class LoggingTests(mtr.RepositoryLoggingTests):
