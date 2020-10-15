@@ -687,6 +687,12 @@ class Repository(MuteacleConfigurable):
         # simply override with a dummy method.
         raise NotImplementedError
 
+    def default_hasher_class(self):
+        # Returns the default hasher class
+        class_name = self.defaults['hasher_class_name']
+        default_class = self.supported_hashers.get(class_name)
+        return default_class
+
     def get_config(self):
         """
         Returns the active configuration for the Repository.
@@ -912,8 +918,7 @@ class SQLiteRepository(Repository):
 
         self.get_config() # updates self._config
         time_res_s = self._config['time_res_s']
-        class_name = self.defaults['hasher_class_name']
-        default_hasher_class = self.supported_hashers[class_name]
+        default_hasher_class = self.default_hasher_class()
         hcls = kwargs.get('hasher_class', default_hasher_class)
         hcfg = kwargs.get('hasher_config', {})
         if hcls not in self.supported_hashers.values():
@@ -1079,8 +1084,7 @@ class SQLiteRepository(Repository):
         else:
             # no hashers found
             if hasher_class is None:
-                class_name = self.defaults['hasher_class_name']
-                hasher_class = self.supported_hashers[class_name]
+                hasher_class = self.default_hasher_class()
 
         salt = token_bytes(self._config['salt_length'])
         hasher_new = hasher_class(salt, **config)

@@ -277,8 +277,7 @@ class SetupTests(unittest.TestCase):
         meta = {'test': 'save_hasher_config', 'ts': ts}
         self.repo.set_config({'meta': meta})
 
-        class_name = self.repo.defaults['hasher_class_name']
-        hasher_class = self.repo.supported_hashers[class_name]
+        hasher_class = self.repo.default_hasher_class()
         salt_len = self.repo._config['salt_length']
         salt = token_bytes(salt_len)
         hasher_new = hasher_class(salt, meta=meta)
@@ -336,7 +335,7 @@ class SetupTests(unittest.TestCase):
         """
         ts = datetime.utcnow().timestamp()
         meta = {'test':'new_hasher', 'ts':ts}
-        default_class_name = self.repo.defaults['hasher_class_name']
+        default_hasher_class = self.repo.default_hasher_class()
         req = self.repo.new_hasher(config={'meta': meta})
         hasher = req['hasher']
         dt = datetime.utcnow()
@@ -346,7 +345,7 @@ class SetupTests(unittest.TestCase):
 
         hashers_same_dt = self.repo.get_hashers(dt)
 
-        self.assertEqual(hasher.__class__.__name__, default_class_name)
+        self.assertTrue(isinstance(hasher, default_hasher_class))
         self.assertIn(hasher, hashers_same_dt)
 
     def test_new_hasher_class_config_changed(self):
@@ -362,7 +361,7 @@ class SetupTests(unittest.TestCase):
         # configurables
         ts = datetime.utcnow().timestamp()
         meta = {'test':'new_hasher_class_config_changed','ts_start':ts}
-        default_class_name = self.repo.defaults['hasher_class_name']
+        default_hasher_class = self.repo.default_hasher_class()
         class_custom = muteacle.PBKDF2Hasher
 
         req_a = self.repo.new_hasher(
@@ -377,7 +376,7 @@ class SetupTests(unittest.TestCase):
 
         self.assertIn(hasher_a, hashers_same_dt)
         self.assertIn(hasher_b, hashers_same_dt)
-        self.assertNotEqual(hasher_a.__class__.__name__, default_class_name)
+        self.assertFalse(isinstance(hasher_a, default_hasher_class))
 
     def test_new_hasher_second_hasher_config_changed(self):
         """

@@ -36,12 +36,15 @@ Features
 
 * **Repository**
 
-    * ``default_hasher_class()``: shortcut for getting the default
-      hasher class without a multi-stage lookup routine
+    * Update ``new_hasher()``: automatically apply last saved
+      hasher configuration but with a regenerated salt if a new
+      hasher is needed, but no hasher configuration changes have
+      been requested.
 
-    * ``get_latest_hasher()``
+    * Add ``get_latest_hasher()``: shortcut for loading the last
+      hasher saved
 
-    * ``sleep_until_repo_config_applied()``, alternative to
+    * Add ``sleep_until_repo_config_applied()``, alternative to
       ``sleep_until_interval_end()`` that senses when pending
       Repository configurations have been applied
 
@@ -76,10 +79,9 @@ Miscellaneous Wishlist
 
 * **Handling of Slow Hasing Operations**: Hashing operations that take
   more than one interval to complete have not been tested. Tests that
-  ensure hashes that take a long time to generate are correctly logged
-  would be nice.
+  verify correct handling of lengthy operations would be nice.
 
-* **Re-hashing**: Ability to upgrade hashes to a more secure standard
+* **Re-hashing**: An ability to upgrade hashes to more secure standards
   as they become available or necessary, while protecting recallability
-  of the hashes
+  of the hashes, would be extremely useful for long-term logs.
 
