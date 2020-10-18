@@ -1213,9 +1213,13 @@ class SQLiteRepository(Repository):
         Creates tables in the database file specified in ``self._db_path``
         for use with Muteacle.
 
-        Returns True if setup was successful or not required, False
-        otherwise.
+        Returns ``True`` if setup was successful or not required,
+        ``False`` otherwise.
 
+        No arguments are supported at this time.
+
+        Exceptions
+        ----------
         May raise sqlite3.OperationalErrors in the event of technical
         difficulties when accessing the database files.
 
@@ -1262,14 +1266,16 @@ class SQLiteRepository(Repository):
         Write names of supported classes to the MuteacleHasherTypes
         table and assigned type ids. Returns None.
 
-        May throw sqlite3.DatabaseError in the event of technical
-        difficulties accessing the database file.
-
         This method is only intended to be run after the tables have
         been created in the database file with ``_slr_create_tables()``.
 
+        Exceptions
+        ----------
+        May throw sqlite3.DatabaseError in the event of technical
+        difficulties accessing the database file.
+
         """
-        conn = self.get_db_conn()
+        conn = self.get_db_conn(mode='rw')
         sc = "INSERT INTO MuteacleHasherTypes(name) VALUES (?)"
         for tname in self.supported_hashers.keys():
             conn.execute(sc, (tname,))
@@ -1282,22 +1288,28 @@ class SQLiteRepository(Repository):
 
     def _slr_check_db_tables(self):
         """
-        Check if tables with names and columns matching the Muteacle specs
-        are in the nominated database file.
+        Check if tables have been created, in the underlying SQLite
+        database file, to specifications in ``self.table_spec``.
+        Returns a ``dict`` containing test results.
 
-        Returns a ``dict`` of results with the following values:
+        Returned Values
+        ---------------
+        * ``tables_expected`` - Number of tables found in specification
 
-        * tables_expected - Number of tables in specification
+        * ``tables_found`` - Number of tables with names mentioned in
+          specification
 
-        * tables_found - Number of tables with names matching specification
-
-        * tables_verified - Number of tables with names and columns
+        * ``tables_verified`` - Number of tables with names and columns
           matching specification
 
-        NOTE: The check is skipped if the database path ``_db_path`` has
-        been set to ``:memory:``. This happens when the Repository is run
-        in volatile memory.
+        Note
+        ----
+        The check is skipped if the database path ``_db_path`` has
+        been set to ``:memory:``. This happens when the Repository
+        is run in volatile memory.
 
+        Exceptions
+        ----------
         May throw sqlite3.DatabaseError in the event of technical
         difficulties accessing the database file.
 
@@ -1341,16 +1353,22 @@ class SQLiteRepository(Repository):
 
     def _slr_db_uri(self, path, **kwargs):
         """
-        Generates SQLite URIs for use with the sqlite3.connect()
-        method.
+        Generates SQLite URIs for use with ``sqlite3.connect()``.
 
-        See Also:
-        ---------
+        Keyword Arguments
+        -----------------
+        * ``mode`` - Set to ``ro`` for read-only, ``rw`` for
+          read-write, ``rwc`` for read-write-create (default).
+
+        * ``psow``, ``immutable`` - Please refer to the SQLite
+          Documentation for information on these arguments.
+
+        See Also
+        --------
         * SQLite Documentation on Uniform Resource Identifiers:
           https://sqlite.org/uri.html
 
         """
-        # TODO: document keywords
         keys_supported = ('mode', 'psow', 'immutable')
         q_opts = dict_to_qstring(kwargs, keys=keys_supported)
         if len(q_opts) > 0:
@@ -1359,10 +1377,14 @@ class SQLiteRepository(Repository):
             return "file:{0}".format(path)
 
     def _slr_write_hasher_config(self, time_res_s, type_id, config_json, salt_str):
-        # Write Hasher to database.
-        # Returns datetime of the earliest timestamp which is able to
-        # recall the Hasher.
-        conn = self.get_db_conn()
+        """
+        Writes a Hasher to the database.
+
+        Returns the earliest ``datetime`` with which the Hasher may be
+        recalled.
+
+        """
+        conn = self.get_db_conn(mode='rw')
         sc = """
              INSERT INTO MuteacleHasherConfigs(
                 timestamp,
@@ -1388,14 +1410,35 @@ class SQLiteRepository(Repository):
         return dt_n
 
     def _slr_write_hashes(self, items, hasher):
-        # Generates hashes of data items in ``items`` and saves them to
-        # the database (witnessing). Returns a tuple as follows:
-        # (items_logged, items_total)
-        conn = self.get_db_conn()
+        """
+        Generates hashes of data items in ``items`` and saves them to
+        the database (witnessing). Returns a tuple containing:
+
+        * ``[0]`` - items successfully witnessed
+
+        * ``[1]`` - total number of items submitted
+
+        * ``[2]`` - items rejected
+
+        Arguments
+        ---------
+        * ``hasher`` - Hasher object to generate hashes of items in ``items``
+
+        * ``items`` - Data items to be witnessed by the log
+
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-write access to the database file.
+
+        """
+        conn = self.get_db_conn(mode='rw')
         conn.execute('BEGIN')
         count = 0
+        rejected = []
         for i in items:
             if isinstance(i, bytes) is not True:
+                rejected.append(i)
                 continue
             mhsh = hasher.get_hash(i)
             mhsh_b64 = b64encode(mhsh)
@@ -1406,10 +1449,21 @@ class SQLiteRepository(Repository):
         conn.commit()
         if self._db_keep_open is not True:
             self.close_db()
-        return(count, len(items))
+        return(count, len(items), rejected) # TODO: better off using a dicts?
 
     def _slr_delete_pending_repo_configs(self):
-        conn = self.get_db_conn()
+        """
+        Deletes all repository configurations with future timestamps
+        from the database file. Intended to be run before writing
+        pending repository configurations.
+
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-write access to the database file.
+
+        """
+        conn = self.get_db_conn(mode='rw')
         sc = "DELETE FROM MuteacleRepositoryConfigs WHERE timestamp > ?"
         ts_now = datetime.utcnow().timestamp()
         conn.execute(sc, (ts_now,))
@@ -1418,10 +1472,27 @@ class SQLiteRepository(Repository):
             self.close_db()
 
     def _slr_write_repo_config(self, timestamp, config_json):
-        # Write Repository configuration to the database.
-        # NOTE: Please do not use arbitrary timestamps that are not
-        # exactly at an interval start without a good reason.
-        conn = self.get_db_conn()
+        """
+        Writes a Repository configuration to the database.
+        
+        Arguments
+        ---------
+        * ``timestamp`` - The earliest timestamp at which the
+          configuration may be recalled. Please use only timestamps
+          that correspond to a day interval start during normal
+          operation to ensure that witnessings can be properly
+          verified.
+
+        * ``config_json`` - The repository configuration in JSON
+          format.
+
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-write access to the database file.
+
+        """
+        conn = self.get_db_conn(mode='rw')
         sc = """
              INSERT INTO MuteacleRepositoryConfigs(
                 timestamp, config, configHash
@@ -1438,6 +1509,24 @@ class SQLiteRepository(Repository):
             self.close_db()
 
     def _slr_read_active_repo_config(self):
+        """
+        Returns the active configuration, and the earliest datetime
+        with which the configuration can be recalled. Information is
+        returned in a ``dict``.
+
+        Returned Values
+        ---------------
+        * ``config`` - The active configuration
+
+        * ``datetime`` - The earliest datetime which ``config`` may
+          be recalled
+
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-only access to the database file.
+
+        """
         ts = datetime.utcnow().timestamp()
         conn = self.get_db_conn(mode='ro')
         sc = """
@@ -1450,15 +1539,35 @@ class SQLiteRepository(Repository):
         row = cus.fetchone()
         if row is not None:
             config = json_decoder.decode(row['config'])
-            dt = datetime.fromtimestamp(row['timestamp'])
+            dt_config = datetime.fromtimestamp(row['timestamp'])
         else:
             config = {}
-            dt = None
+            dt_config = None
         if self._db_keep_open is not True:
             self.close_db()
-        return {'config': config, 'datetime': dt}
+        return {'config': config, 'datetime': dt_config}
 
     def _slr_read_pending_repo_config(self):
+        """
+        Returns the pending configuration, and the datetime when
+        the configuration will take effect. This information is
+        returned as a ``dict``.
+
+        Returned Values
+        ---------------
+        * ``config``: Pending repository configuration, as a ``dict``.
+          An empty ``dict`` is returned when there is no pending
+          configuration.
+
+        * ``datetime``: The datetime when the configuration takes
+          effect. ``None`` when there is no pending configuration.
+
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-only access to the database file.
+
+        """
         ts = datetime.utcnow().timestamp()
         conn = self.get_db_conn(mode='ro')
         sc = """
@@ -1471,15 +1580,29 @@ class SQLiteRepository(Repository):
         row = cus.fetchone()
         if row is not None:
             config = json_decoder.decode(row['config'])
-            dt = datetime.fromtimestamp(row['timestamp'])
+            dt_config = datetime.fromtimestamp(row['timestamp'])
         else:
             config = {}
-            dt = None
+            dt_config = None
         if self._db_keep_open is not True:
             self.close_db()
-        return {'config': config, 'datetime': dt}
+        return {'config': config, 'datetime': dt_config}
 
     def _slr_read_hasher_type_id(self, hasher):
+        """
+        Returns the type id associated with the class of ``hasher``
+        as an ``int``.
+
+        Hasher type id's are required by the SQLiteRepository to
+        determine the correct class of the Hasher being re-created.
+        Only supported Hasher types have an id known to the database.
+        
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-only access to the database file.
+
+        """
         conn = self.get_db_conn(mode='ro')
         sc = "SELECT rowid from MuteacleHasherTypes WHERE name = ?"
         class_name = hasher.__class__.__name__
@@ -1494,10 +1617,30 @@ class SQLiteRepository(Repository):
             return None
 
     def _slr_count_pending_repo_configs(self, **kwargs):
-        # Counts number of Repository configurations with future
-        # timestamps. To be used for checking for scheduled changes,
-        # or if time has been tampered with or misconfigured.
-        conn = self.get_db_conn()
+        """
+        Counts the number pending Repository configurations.
+        Pending configurations stored in the database are
+        distinguished by having future timestamps.
+
+        Returns the number of pending configurations as an ``int``.
+
+        No keyword arguments are supported at this time.
+        
+        Rationale
+        ---------
+        This method is used primarily as a preliminary check to detect
+        anomalies in the system clock. A log should only have one
+        pending configuration at any given time. The presence of
+        multiple pending configurations is thus construed as a sign
+        that the system clock has been incorrectly rolled back.
+
+        Exceptions
+        ----------
+        May raise sqlite3.OperationalError when technical difficulties
+        prevent read-only access to the database file.
+
+        """
+        conn = self.get_db_conn(mode='ro')
         sc = """
              SELECT count(*) FROM MuteacleRepositoryConfigs
              WHERE timestamp > ?
